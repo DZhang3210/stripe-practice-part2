@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   const eventType = event.type;
+  //   console.log(event);
 
   try {
     switch (eventType) {
@@ -40,7 +41,6 @@ export async function POST(req: NextRequest) {
           const user = await db.user.findUnique({
             where: { email: customer.email },
           });
-
           if (!user) {
             console.error("User not found");
             throw new Error("User not found");
@@ -64,21 +64,32 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
+        const customer = await stripe.customers.retrieve(
+          subscription.customer as string,
+        );
 
-        const user = await db.user.findUnique({
-          where: { id: subscription.customer as string },
-        });
-
-        if (user) {
-          await db.user.update({
-            where: { id: subscription.customer as string },
-            data: {
-              hasAccess: false,
-            },
+        // Check if the retrieved customer has an email
+        if ("email" in customer && customer.email) {
+          // Find the user in your database using the email
+          const user = await db.user.findUnique({
+            where: { email: customer.email },
           });
+
+          if (user) {
+            // Update the user's access status
+            await db.user.update({
+              where: { email: customer.email },
+              data: {
+                hasAccess: false,
+              },
+            });
+          } else {
+            console.error("User not found for subscription deletion");
+            throw new Error("User not found for subscription deletion");
+          }
         } else {
-          console.error("User not found for subscription deletion");
-          throw new Error("User not found for subscription deletion");
+          console.error("Customer email not found or customer is deleted");
+          throw new Error("Customer email not found or customer is deleted");
         }
         break;
       }
